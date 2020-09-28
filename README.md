@@ -1,2 +1,2 @@
 # AutoColumnSchedule
-Automatic creation of column schedule in Revit using Dynamo and Python scripts
+Automatic creation of column schedule in Revit using Dynamo, Python and Revit API.
