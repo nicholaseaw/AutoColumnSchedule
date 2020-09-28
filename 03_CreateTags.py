@@ -1,9 +1,10 @@
 """
 03 AutoColumnSchedule - Set column mark and size and create tags
-"""
+
 __author__ = 'Nicholas Eaw'
 __version__ = '1.0.0'
 __date created__ = '27/09/2020'
+"""
 
 #load the Python Standard and DesignScript Libraries
 import sys
@@ -37,6 +38,7 @@ tag1 = UnwrapElement(IN[1])
 tag2 = UnwrapElement(IN[2])
 tag3 = UnwrapElement(IN[3])
 tag4 = UnwrapElement(IN[4])
+drop = UnwrapElement(IN[5])
 
 bic = System.Enum.ToObject(BuiltInCategory, category.Id.IntegerValue)
 
@@ -312,9 +314,19 @@ for i in textNotes:
 lxpos = -(cdict['Column Schedule Width']/2) + 100/304.8
 lypos = -(cdict['Column Schedule Height']/2) + cdict['Head Row Width'] + 200/304.8
 
+#get start position for drop symbol
+dsxpos = lxpos
+dsypos = -(cdict['Column Schedule Height']/2) + cdict['Head Row Width']
+
+#create array of y points for drop symbols
+dsyposArray = [dsypos]
+for i in range(len(sortedlevels)):
+	dsypos = dsypos + cdict['Row Height']
+	dsyposArray.append(dsypos)
+
 #create array of y points for text notes
 lyposArray = [lypos]
-for i in range(pRowArray - 1):
+for i in range(pRowArray):
 	lypos = lypos + cdict['Row Height']
 	lyposArray.append(lypos)
 
@@ -322,11 +334,14 @@ for i in range(pRowArray - 1):
 TransactionManager.Instance.EnsureInTransaction(doc)
 
 #create textnote
-for i in range(pRowArray):
+for i in range(len(sortedlevels)):
 	x = lxpos
 	y = lyposArray[i]
 	textNotePoint = Point.Create(XYZ(x,y,0)).Coord
 	textNote = TextNote.Create(doc, doc.ActiveView.Id, textNotePoint, sortedlevels[i].Name.upper(), textOutput[0].Id)
+	y1 = dsyposArray[i]
+	dropSymbolPoint = Point.Create(XYZ(x,y1,0)).Coord
+	dp = doc.Create.NewFamilyInstance(dropSymbolPoint, drop, view[0])
 
 #end transaction
 TransactionManager.Instance.TransactionTaskDone()
