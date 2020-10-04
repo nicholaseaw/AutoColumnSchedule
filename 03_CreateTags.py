@@ -2,7 +2,7 @@
 03 AutoColumnSchedule - Set column mark and size and create tags
 
 __author__ = 'Nicholas Eaw'
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 __date created__ = '27/09/2020'
 """
 
@@ -142,12 +142,22 @@ for i in range(len(filteredColumnList)):
 	for j in range(len(filteredColumnList[i])):
 		columnTypeId = filteredColumnList[i][j].GetTypeId()
 		columnElement = doc.GetElement(columnTypeId)
-		dia = columnElement.LookupParameter("b")
-		if dia:
+		if "Round" in columnElement.FamilyName.ToString(): 
+			dia = columnElement.LookupParameter("b")
 			columnsize[i].append(dia.AsValueString())
+		elif "Rectangular" in columnElement.FamilyName.ToString():
+			columnsize[i].append([])
+			w1 = columnElement.LookupParameter("b")
+			w2 = columnElement.LookupParameter("h")
+			columnsize[i][j].append(w1.AsValueString())
+			columnsize[i][j].append(w2.AsValueString())
+
 
 #convert string of column sizes to int
-columnsize = [list(map(int, i)) for i in columnsize]
+def convert_to_int(lists):
+	return [int(el) if not isinstance(el,list) else convert_to_int(el) for el in lists]
+	
+columnsize = convert_to_int(columnsize)
 
 #filter out empty lists
 columnsize = [x for x in columnsize if x]
@@ -169,10 +179,46 @@ combinelist = []
 for n,v in combine:
 	combinelist.append(zip(n,v))
 
-columnrepository = []
-for x in combinelist:
-	uniquelist = sorted(set(tuple(x)))
-	columnrepository.append(uniquelist)
+col = []
+bool = []
+newlst = []
+uniquelst = []
+col1 = []
+
+def get_unique(lists):
+	for floor in lists:
+		for column in floor:
+			for i in column:
+				if not isinstance(i ,list):
+					t = False
+				elif isinstance(i, list):
+					t = True
+		bool.append(t)
+	
+	for i in range(len(bool)):
+		if not bool[i]:
+			unique = sorted(set(tuple(lists[i])))
+			uniquelst.append(unique)
+		elif bool[i]:
+			uniquelst.append([])
+			for j in range(len(lists[i])):
+				uniquelst[i].append([])
+				uniquelst[i][j].append(lists[i][j][0])
+				for k in range(len(lists[i][j][1])):
+					uniquelst[i][j].append(lists[i][j][1][k])
+					
+			unique = sorted(set(map(tuple, uniquelst[i])))
+			col.append(unique)
+	
+	for i in range(len(bool)):
+		if bool[i]:
+			uniquelst[i] = col[i-1]
+	
+	uniquelist = map(list, uniquelst)
+	
+	return uniquelist
+
+columnrepository = get_unique(combinelist)
 
 #retrieve column marks for scheduling
 columnmarkschedule = []
@@ -229,6 +275,7 @@ for e in elementCollector:
 	if not tagged:
 		if e.Name != "Column Schedule v01" and e.Name != "Main Bar Array_Y":
 			notTagged.append(e)
+
 
 #create tags for elements
 for e in notTagged:
@@ -287,6 +334,7 @@ for i in range(0, len(Tagged), pRowArray-1):
 
 #transpose list to get 1st row
 transposeTaggedList = list(zip(*colsublist))
+
 
 #create column mark
 for i in range(len(colsublist)):
