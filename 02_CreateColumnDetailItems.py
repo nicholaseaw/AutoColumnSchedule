@@ -1,9 +1,10 @@
 """
 02 AutoColumnSchedule - Create and place column detail items 
-"""
+
 __author__ = 'Nicholas Eaw'
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 __date created__ = '27/09/2020'
+"""
 
 #load the Python Standard and DesignScript Libraries
 import sys
@@ -30,7 +31,8 @@ clr.ImportExtensions(Revit.GeometryConversion)
 import System
 
 #inputs
-columndetail = UnwrapElement(IN[0])
+circolumndetail = UnwrapElement(IN[0])
+sqcolumndetail = UnwrapElement(IN[1])
 outlist = []
 OUTPUT = []
 
@@ -59,6 +61,7 @@ pValues = [int(i) for i in pValues]
 pValuesConverted = []
 for i in pValues:
 	pValuesConverted.append(i/304.8)
+	
 #create dictionary
 cdict = dict(zip(pNames, pValuesConverted)) 
 
@@ -114,6 +117,15 @@ for i in range(len(sortedlevels)):
 #filter out steel columns
 filteredColumnList = [[i for i in nested if str(i.StructuralMaterialType) == "Concrete"] for nested in columnsLevel]
 
+#check if columns are circular or rectangular
+colfamily = []
+for i in range(len(filteredColumnList)):
+	colfamily.append([])
+	for j in range(len(filteredColumnList[i])):
+		columnTypeId = filteredColumnList[i][j].GetTypeId()
+		columnElement = doc.GetElement(columnTypeId)
+		colfamily[i].append(columnElement.FamilyName.ToString())		
+
 #get column size
 columnsize = []
 for i in range(len(filteredColumnList)):
@@ -121,12 +133,24 @@ for i in range(len(filteredColumnList)):
 	for j in range(len(filteredColumnList[i])):
 		columnTypeId = filteredColumnList[i][j].GetTypeId()
 		columnElement = doc.GetElement(columnTypeId)
-		dia = columnElement.LookupParameter("b")
-		if dia:
+		if "Round" in columnElement.FamilyName.ToString(): 
+			dia = columnElement.LookupParameter("b")
 			columnsize[i].append(dia.AsValueString())
+		elif "Rectangular" in columnElement.FamilyName.ToString():
+			columnsize[i].append([])
+			w1 = columnElement.LookupParameter("b")
+			w2 = columnElement.LookupParameter("h")
+			columnsize[i][j].append(w1.AsValueString())
+			columnsize[i][j].append(w2.AsValueString())
 
 #convert string of column sizes to int
-columnsize = [list(map(int, i)) for i in columnsize]
+def convert_to_int(lists):
+	return [int(el) if not isinstance(el,list) else convert_to_int(el) for el in lists]
+	
+columnsize = convert_to_int(columnsize)
+
+#filter out empty lists
+columnsize = [x for x in columnsize if x]
 
 #get column marks
 columnmark = []
@@ -135,6 +159,20 @@ for i in range(len(filteredColumnList)):
 	for j in range(len(filteredColumnList[i])):
 		p = filteredColumnList[i][j].LookupParameter("Mark").AsString()
 		columnmark[i].append(p)
+		
+#filter out empty lists
+columnmark = [x for x in columnmark if x]
+
+#get unique column mark and type
+combinemarktype = zip(columnmark, colfamily)
+colmarktype = []
+for n,v in combinemarktype:
+	colmarktype.append(zip(n,v))
+
+colmarktyperepo = []
+for x in colmarktype:
+	uniquelist = sorted(set(tuple(x)))
+	colmarktyperepo.append(uniquelist)
 
 #get unique sizes and mark
 combine = zip(columnmark, columnsize)
@@ -142,12 +180,47 @@ combinelist = []
 for n,v in combine:
 	combinelist.append(zip(n,v))
 
-columnrepository = []
-for x in combinelist:
-	uniquelist = sorted(set(tuple(x)))
-	columnrepository.append(uniquelist)
+col = []
+bool = []
+newlst = []
+uniquelst = []
+col1 = []
 
-columnrepositorydup = columnrepository
+def get_unique(lists):
+	for floor in lists:
+		for column in floor:
+			for i in column:
+				if not isinstance(i ,list):
+					t = False
+				elif isinstance(i, list):
+					t = True
+		bool.append(t)
+	
+	for i in range(len(bool)):
+		if not bool[i]:
+			unique = sorted(set(tuple(lists[i])))
+			uniquelst.append(unique)
+		elif bool[i]:
+			uniquelst.append([])
+			for j in range(len(lists[i])):
+				uniquelst[i].append([])
+				uniquelst[i][j].append(lists[i][j][0])
+				for k in range(len(lists[i][j][1])):
+					uniquelst[i][j].append(lists[i][j][1][k])
+					
+			unique = sorted(set(map(tuple, uniquelst[i])))
+			col.append(unique)
+	
+	for i in range(len(bool)):
+		if bool[i]:
+			uniquelst[i] = col[i-1]
+	
+	uniquelist = map(list, uniquelst)
+	
+	return uniquelist
+
+columnrepository = get_unique(combinelist)
+
 #retrieve column marks for scheduling
 columnmarkschedule = []
 for i in range(len(columnrepository)):
@@ -157,12 +230,19 @@ for i in range(len(columnrepository)):
 columnmarkschedule = sorted(list(set(columnmarkschedule)))
 
 newlist = []
-for i in range(len(columnrepository)-1):
+for i in range(len(columnrepository)):
 	newlist.append([])
 	addnew = pColumnArray - len(columnrepository[i])
 	for j in range(addnew):
 		newlist[i].insert(j,[])
-
+		
+newlist1 = []
+for i in range(len(columnrepository)):
+	newlist1.append([])
+	addnew = pColumnArray - len(columnrepository[i])
+	for j in range(addnew):
+		newlist1[i].insert(j,[])
+		
 #get column mark index
 markindex = []
 for i in columnmarkschedule:
@@ -182,8 +262,14 @@ for i in range(len(columnrepository)):
 		k = insert[i][j]
 		newlist[i].insert(k, columnrepository[i][j])
 
+for i in range(len(colmarktyperepo)):
+	for j in range(len(colmarktyperepo[i])):
+		k = insert[i][j]
+		newlist1[i].insert(k, colmarktyperepo[i][j])
+
 #transpose list
 tnewlist = list(zip(*newlist))
+tnewlist1 = list(zip(*newlist1))
 
 #create line starting and ending points for x and y
 xlinestartpoint = -(cdict['Column Schedule Width']/2) + cdict['Head Column Width']
@@ -226,11 +312,12 @@ for i in range(len(tnewlist)):
 			lineendpoint = Point.Create(XYZ(xArrayLineEndPoints[i], yArrayLineEndPoints[j],0)).Coord
 			line = Line.CreateBound(linestartpoint, lineendpoint)
 			detailline = doc.Create.NewDetailCurve(view[0], line)		
-#			pass
 		else:
 			position = Point.Create(XYZ(xposArray[i],yposArray[j],0)).Coord
-			cd = doc.Create.NewFamilyInstance(position, columndetail, view[0])
-#			OUTPUT.append(cd.ToDSType(True))
+			if "Round" in tnewlist1[i][j][1]:
+				cd = doc.Create.NewFamilyInstance(position, circolumndetail, view[0])
+			elif "Rectangular" in tnewlist1[i][j][1]:
+				cd = doc.Create.NewFamilyInstance(position, sqcolumndetail, view[0])
 
 #end transaction
 TransactionManager.Instance.TransactionTaskDone()
